@@ -1,4 +1,4 @@
-# Fix for ChromaDB on older SQLite (must be first lines in the file)
+# Fix for ChromaDB on older SQLite (must be first lines)
 __import__('pysqlite3')
 import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
@@ -10,8 +10,8 @@ from pathlib import Path
 import fitz  # PyMuPDF
 from sentence_transformers import SentenceTransformer
 import chromadb
-from chromadb.config import Settings
 from chromadb.utils import embedding_functions
+from langdetect import detect
 
 # LLM imports
 import requests
@@ -35,7 +35,7 @@ CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 50))
 TOP_K = int(os.getenv("TOP_K", 4))
 DB_DIR = "chroma_db"
 
-st.set_page_config(page_title="🎓 College Enquiry Chatbot", page_icon="🎓")
+st.set_page_config(page_title="🎓 Multilingual College Chatbot", page_icon="🎓")
 
 # --- EMBEDDING MODEL ---
 @st.cache_resource
@@ -65,8 +65,8 @@ def chunk_text(text: str, chunk_size=500, overlap=50):
         i += chunk_size - overlap
     return chunks
 
-# --- CHROMA DB INIT ---
-client = chromadb.Client(Settings(chroma_db_impl="duckdb+parquet", persist_directory=DB_DIR))
+# --- CHROMA DB INIT (new API) ---
+client = chromadb.PersistentClient(path=DB_DIR)
 collection = client.get_or_create_collection(
     name="college_docs",
     embedding_function=embedding_functions.SentenceTransformerEmbeddingFunction(EMBEDDING_MODEL)
@@ -104,18 +104,30 @@ def retrieve(query: str, k=TOP_K):
         docs.append({"text": doc, "source": meta.get("source", "unknown")})
     return docs
 
-# --- BULLET PROMPT ---
-def compose_prompt_bullet(question: str, contexts):
+# --- PROMPT BUILDER ---
+def compose_prompt_bullet(question: str, contexts, lang="en"):
     ctx_texts = "\n\n".join([f"Source: {c['source']}\n{c['text']}" for c in contexts])
-    prompt = (
-        "You are an intelligent college information assistant.\n"
-        "Use ONLY the provided context to answer.\n"
-        "Provide the answer in BULLET POINTS.\n"
-        "Make emails clickable using mailto: and phone numbers clickable using tel:.\n"
-        "If the answer is not in context, say you don't know and suggest contacting the college.\n\n"
-        f"CONTEXT:\n{ctx_texts}\n\nQUESTION: {question}\n\n"
-        "Answer in bullet points, concise, with direct facts."
-    )
+
+    if lang == "ar":
+        prompt = (
+            "أنت مساعد ذكي لمعلومات الكلية.\n"
+            "استخدم فقط المعلومات المقدمة للإجابة.\n"
+            "قدم الإجابة في شكل نقاط.\n"
+            "اجعل عناوين البريد الإلكتروني قابلة للنقر باستخدام mailto: وأرقام الهاتف باستخدام tel:.\n"
+            "إذا لم تكن الإجابة في النص، قل أنك لا تعرف واقترح التواصل مع الكلية.\n\n"
+            f"المحتوى:\n{ctx_texts}\n\nالسؤال: {question}\n\n"
+            "أجب في نقاط واضحة ودقيقة."
+        )
+    else:
+        prompt = (
+            "You are an intelligent college information assistant.\n"
+            "Use ONLY the provided context to answer.\n"
+            "Provide the answer in BULLET POINTS.\n"
+            "Make emails clickable using mailto: and phone numbers clickable using tel:.\n"
+            "If the answer is not in context, say you don't know and suggest contacting the college.\n\n"
+            f"CONTEXT:\n{ctx_texts}\n\nQUESTION: {question}\n\n"
+            "Answer in bullet points, concise, with direct facts."
+        )
     return prompt
 
 # --- LLM CALLS ---
@@ -154,19 +166,27 @@ def call_groq_chat(model: str, prompt: str):
     return resp.choices[0].message.content
 
 # --- STREAMLIT UI ---
-st.title("🎓 College Enquiry & FAQ Chatbot")
-st.write("Ask about the college's admissions, fees, departments, contact info, rules, schedules, etc.")
+st.title("🎓 Multilingual College Enquiry Chatbot")
+st.write("Ask questions in English or Arabic, get answers in the same language.")
 
-question = st.text_input("Your question:")
+question = st.text_input("Your question (English or Arabic):")
 if st.button("Ask") and question.strip():
+    # Detect language
+    try:
+        lang = detect(question)
+    except:
+        lang = "en"
+
     with st.spinner("Retrieving context..."):
         contexts = retrieve(question, k=TOP_K)
+
     st.subheader("Retrieved Contexts")
     for c in contexts:
         st.markdown(f"**Source:** {c['source']}")
         st.write(c['text'][:500] + ("..." if len(c['text']) > 500 else ""))
 
-    prompt = compose_prompt_bullet(question, contexts)
+    prompt = compose_prompt_bullet(question, contexts, lang="ar" if lang == "ar" else "en")
+
     with st.spinner(f"Querying {LLM_BACKEND}..."):
         try:
             if LLM_BACKEND == "hf":
