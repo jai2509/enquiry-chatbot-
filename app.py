@@ -1,4 +1,4 @@
-# Fix for ChromaDB on older SQLite (must be first lines)
+# --- Fix for ChromaDB on older SQLite ---
 __import__('pysqlite3')
 import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
@@ -65,7 +65,7 @@ def chunk_text(text: str, chunk_size=500, overlap=50):
         i += chunk_size - overlap
     return chunks
 
-# --- CHROMA DB INIT (new API) ---
+# --- CHROMA DB INIT ---
 client = chromadb.PersistentClient(path=DB_DIR)
 collection = client.get_or_create_collection(
     name="college_docs",
@@ -73,9 +73,9 @@ collection = client.get_or_create_collection(
 )
 
 # --- INDEXING PDFs ---
-def index_pdfs(pdf_folder: Path):
+def index_pdfs(search_path: Path):
     existing_ids = set(collection.get()["ids"])
-    for pdf in pdf_folder.glob("*.pdf"):
+    for pdf in search_path.glob("*.pdf"):
         text = pdf_to_text(pdf)
         if not text.strip():
             continue
@@ -91,10 +91,19 @@ def index_pdfs(pdf_folder: Path):
             )
     client.persist()
 
-# Build index if not exists
-pdf_folder = Path("pdfs")
-pdf_folder.mkdir(exist_ok=True)
-index_pdfs(pdf_folder)
+# --- Scan for PDFs in root or 'pdfs/' ---
+root_pdfs = list(Path(".").glob("*.pdf"))
+pdfs_folder = Path("pdfs")
+folder_pdfs = list(pdf_folder.glob("*.pdf")) if pdfs_folder.exists() else []
+all_pdfs = root_pdfs + folder_pdfs
+
+if not all_pdfs:
+    st.warning("No PDF files found in repo root or 'pdfs/' folder.")
+else:
+    # Index both root and pdfs/ folder
+    index_pdfs(Path("."))
+    if pdfs_folder.exists():
+        index_pdfs(pdf_folder)
 
 # --- RETRIEVAL ---
 def retrieve(query: str, k=TOP_K):
@@ -171,7 +180,6 @@ st.write("Ask questions in English or Arabic, get answers in the same language."
 
 question = st.text_input("Your question (English or Arabic):")
 if st.button("Ask") and question.strip():
-    # Detect language
     try:
         lang = detect(question)
     except:
