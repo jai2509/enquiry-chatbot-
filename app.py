@@ -89,7 +89,7 @@ def index_pdfs(search_path: Path):
                 metadatas=[{"source": pdf.name}],
                 ids=[doc_id]
             )
-    client.persist()
+    # No persist() needed for PersistentClient
 
 # --- Scan for PDFs in root or 'pdfs/' ---
 root_pdfs = list(Path(".").glob("*.pdf"))
