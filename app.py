@@ -1,4 +1,8 @@
-# app.py
+# Fix for ChromaDB on older SQLite (must be first lines in the file)
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
 import os
 import streamlit as st
 from dotenv import load_dotenv
@@ -8,8 +12,6 @@ from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.config import Settings
 from chromadb.utils import embedding_functions
-import uuid
-import re
 
 # LLM imports
 import requests
@@ -72,7 +74,7 @@ collection = client.get_or_create_collection(
 
 # --- INDEXING PDFs ---
 def index_pdfs(pdf_folder: Path):
-    existing_ids = set(doc["id"] for doc in collection.get()["metadatas"] if doc)
+    existing_ids = set(collection.get()["ids"])
     for pdf in pdf_folder.glob("*.pdf"):
         text = pdf_to_text(pdf)
         if not text.strip():
@@ -109,7 +111,7 @@ def compose_prompt_bullet(question: str, contexts):
         "You are an intelligent college information assistant.\n"
         "Use ONLY the provided context to answer.\n"
         "Provide the answer in BULLET POINTS.\n"
-        "If you mention contact info, format it as clickable links (mailto: for emails, tel: for phone numbers).\n"
+        "Make emails clickable using mailto: and phone numbers clickable using tel:.\n"
         "If the answer is not in context, say you don't know and suggest contacting the college.\n\n"
         f"CONTEXT:\n{ctx_texts}\n\nQUESTION: {question}\n\n"
         "Answer in bullet points, concise, with direct facts."
@@ -126,9 +128,8 @@ def call_hf_chat(model: str, prompt: str):
     r = requests.post(url, headers=headers, json=payload, timeout=60)
     r.raise_for_status()
     out = r.json()
-    if isinstance(out, list) and len(out) > 0:
-        if "generated_text" in out[0]:
-            return out[0]["generated_text"]
+    if isinstance(out, list) and len(out) > 0 and "generated_text" in out[0]:
+        return out[0]["generated_text"]
     return str(out)
 
 def call_gemini_chat(model: str, prompt: str):
