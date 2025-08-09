@@ -92,13 +92,19 @@ def index_pdfs(search_path: Path):
     client.persist()
 
 # --- Scan for PDFs in root or 'pdfs/' ---
+# --- Scan for PDFs in root or 'pdfs/' ---
 root_pdfs = list(Path(".").glob("*.pdf"))
 pdfs_folder = Path("pdfs")
-folder_pdfs = list(pdf_folder.glob("*.pdf")) if pdfs_folder.exists() else []
+folder_pdfs = list(pdfs_folder.glob("*.pdf")) if pdfs_folder.exists() else []
 all_pdfs = root_pdfs + folder_pdfs
 
 if not all_pdfs:
     st.warning("No PDF files found in repo root or 'pdfs/' folder.")
+else:
+    # Index both root and pdfs/ folder
+    index_pdfs(Path("."))
+    if pdfs_folder.exists():
+        index_pdfs(pdfs_folder)
 else:
     # Index both root and pdfs/ folder
     index_pdfs(Path("."))
