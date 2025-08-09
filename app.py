@@ -27,7 +27,7 @@ LLM_BACKEND = os.getenv("LLM_BACKEND", "gemini")  # 'gemini', 'groq', 'hf'
 HF_API_TOKEN = os.getenv("HF_API_TOKEN", "")
 HF_MODEL = os.getenv("HF_MODEL", "HuggingFaceH4/zephyr-7b-beta")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-pro")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")  # fixed name
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama3-70b-8192")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 500))
@@ -157,7 +157,7 @@ def call_gemini_chat(model: str, prompt: str):
         raise RuntimeError("GEMINI_API_KEY not set.")
     genai.configure(api_key=GEMINI_API_KEY)
     m = genai.GenerativeModel(model)
-    resp = m.generate_content(prompt)
+    resp = m.generate_content([prompt])  # list for chat format
     return resp.text
 
 def call_groq_chat(model: str, prompt: str):
